@@ -1,0 +1,32 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="144" y1="82" x2="1118" y2="585" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9E5C8"/>
+      <stop offset="0.5" stop-color="#F3B58A"/>
+      <stop offset="1" stop-color="#D86A47"/>
+    </linearGradient>
+    <linearGradient id="card" x1="370" y1="174" x2="931" y2="498" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF9F1" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#FFF1E2" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" rx="36" fill="#F6EFE6"/>
+  <circle cx="171" cy="129" r="181" fill="#F5C29E" fill-opacity="0.55"/>
+  <circle cx="1137" cy="557" r="195" fill="#E68A63" fill-opacity="0.26"/>
+  <rect x="64" y="64" width="1152" height="512" rx="32" fill="url(#bg)"/>
+  <rect x="116" y="118" width="1048" height="404" rx="28" fill="url(#card)"/>
+  <rect x="164" y="166" width="320" height="24" rx="12" fill="#F0D0B6"/>
+  <rect x="164" y="210" width="482" height="92" rx="20" fill="#FFFDF8"/>
+  <rect x="164" y="326" width="552" height="18" rx="9" fill="#DB8661" fill-opacity="0.28"/>
+  <rect x="164" y="360" width="514" height="18" rx="9" fill="#DB8661" fill-opacity="0.2"/>
+  <rect x="164" y="394" width="420" height="18" rx="9" fill="#DB8661" fill-opacity="0.16"/>
+  <rect x="768" y="176" width="304" height="266" rx="24" fill="#FFF8EF"/>
+  <rect x="796" y="206" width="248" height="22" rx="11" fill="#F2D4BA"/>
+  <rect x="796" y="248" width="206" height="16" rx="8" fill="#E8A17D" fill-opacity="0.48"/>
+  <rect x="796" y="278" width="228" height="16" rx="8" fill="#E8A17D" fill-opacity="0.34"/>
+  <rect x="796" y="320" width="248" height="94" rx="18" fill="#F4E0CF"/>
+  <text x="164" y="272" fill="#3E2B21" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="52" font-weight="700">GetQzoneHistory</text>
+  <text x="164" y="468" fill="#5E4639" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="26">导出 QQ 空间历史说说，生成本地 HTML、JSON、Excel 备份</text>
+  <text x="798" y="381" fill="#6B4B3C" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="24">Offline Export</text>
+  <text x="798" y="417" fill="#8A6855" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18">Playwright + Node.js</text>
+</svg>
