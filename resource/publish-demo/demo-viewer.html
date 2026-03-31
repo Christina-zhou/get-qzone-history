@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QQ空间说说离线导出示例</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --card: rgba(255,255,255,0.92);
+      --line: rgba(47, 43, 38, 0.12);
+      --text: #2f2b26;
+      --muted: #72695d;
+      --accent: #c85c3c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(200,92,60,0.18), transparent 26%),
+        linear-gradient(180deg, #f8f3eb 0%, var(--bg) 100%);
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+    }
+    .hero {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(12px);
+      background: rgba(244,239,231,0.84);
+      border-bottom: 1px solid var(--line);
+      padding: 16px 0 14px;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 16px 0 18px;
+    }
+    .toolbar label {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .toolbar select {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.92);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--text);
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 18px 40px rgba(90, 74, 54, 0.08);
+    }
+    .card-head, .card-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .card-head h2 {
+      margin: 2px 0 0;
+      font-size: 18px;
+    }
+    .meta-index, .meta-right, .card-foot, .note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .meta-right, .card-foot {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .content {
+      margin: 14px 0 16px;
+      line-height: 1.75;
+      font-size: 15px;
+      word-break: break-word;
+    }
+    .note {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid var(--line);
+    }
+    @media (max-width: 720px) {
+      .wrap { padding: 18px 14px 40px; }
+      .hero h1 { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>QQ空间说说离线导出示例</h1>
+      <p>这是仓库自带的匿名示例页面，用来展示脚本导出后的浏览效果、排版样式和字段结构，不对应任何真实账号。</p>
+    </section>
+    <section class="toolbar">
+      <label for="sortSelect">排序方式</label>
+      <select id="sortSelect">
+        <option value="desc">创建时间：新到旧</option>
+        <option value="asc">创建时间：旧到新</option>
+      </select>
+    </section>
+    <section class="grid" id="grid"></section>
+    <section class="note">
+      目录中的 demo-posts.json 对应结构化导出结果；当前页面对应最终给用户浏览的 HTML 成品。实际运行时，你自己的结果会输出到 resource/result/。
+    </section>
+  </div>
+  <script>
+    const posts = [
+      {
+        created_time: '2025-02-15 23:11:00',
+        source_name: '示例账号',
+        tid: 'demo-post-0004',
+        content: '这个目录里的文件是发布示例，专门用来展示导出结果格式，不包含真实账号隐私数据。',
+        comment_count: 0,
+        like_count: 31,
+        image_count: 0,
+        created_at: new Date('2025-02-15T23:11:00').getTime()
+      },
+      {
+        created_time: '2025-02-03 18:30:00',
+        source_name: '示例账号',
+        tid: 'demo-post-0003',
+        content: '示例页默认按时间排序，也可以切换成旧到新浏览，查资料时会直观很多。',
+        comment_count: 5,
+        like_count: 27,
+        image_count: 0,
+        created_at: new Date('2025-02-03T18:30:00').getTime()
+      },
+      {
+        created_time: '2025-01-22 09:42:00',
+        source_name: '示例账号',
+        tid: 'demo-post-0002',
+        content: '支持导出 JSON、Excel 和本地 HTML，适合做个人备份，也方便后续再分析。',
+        comment_count: 1,
+        like_count: 12,
+        image_count: 0,
+        created_at: new Date('2025-01-22T09:42:00').getTime()
+      },
+      {
+        created_time: '2025-01-14 21:08:00',
+        source_name: '示例账号',
+        tid: 'demo-post-0001',
+        content: '今天把 QQ 空间历史说说整理成离线网页了，翻旧内容终于不再费劲。',
+        comment_count: 3,
+        like_count: 18,
+        image_count: 0,
+        created_at: new Date('2025-01-14T21:08:00').getTime()
+      }
+    ];
+
+    const grid = document.querySelector('#grid');
+    const select = document.querySelector('#sortSelect');
+
+    function render(mode) {
+      const sorted = posts.slice().sort((a, b) => {
+        return mode === 'asc' ? a.created_at - b.created_at : b.created_at - a.created_at;
+      });
+      grid.innerHTML = sorted.map((post, index) => `
+        <article class="card">
+          <div class="card-head">
+            <div>
+              <div class="meta-index">#${index + 1}</div>
+              <h2>${post.created_time}</h2>
+            </div>
+            <div class="meta-right">
+              <span>${post.source_name}</span>
+              <span>${post.tid}</span>
+            </div>
+          </div>
+          <div class="content">${post.content}</div>
+          <div class="card-foot">
+            <span>评论 ${post.comment_count}</span>
+            <span>点赞 ${post.like_count}</span>
+            <span>图片 ${post.image_count}</span>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    select.addEventListener('change', () => render(select.value));
+    render('desc');
+  </script>
+</body>
+</html>
