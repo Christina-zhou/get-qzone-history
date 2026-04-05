@@ -149,6 +149,56 @@ function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+  }
+  return `${seconds}秒`;
+}
+
+function renderProgressLine(stage, message) {
+  return `[${stage}] ${message}`;
+}
+
+function updateTerminalProgress(stage, message) {
+  const line = renderProgressLine(stage, message);
+  if (process.stdout.isTTY) {
+    process.stdout.write(`\r\x1b[2K${line}`);
+    return;
+  }
+  console.log(line);
+}
+
+function finishTerminalProgress() {
+  if (process.stdout.isTTY) {
+    process.stdout.write('\n');
+  }
+}
+
+async function waitWithProgress(waitTarget, totalMs, stage, message) {
+  const total = Math.max(0, Number(totalMs) || 0);
+  if (!total) {
+    return;
+  }
+  if (!process.stdout.isTTY) {
+    await waitTarget.waitForTimeout(total);
+    return;
+  }
+
+  const stepMs = Math.min(5000, Math.max(1000, Math.floor(total / 10) || 1000));
+  let remaining = total;
+  while (remaining > 0) {
+    updateTerminalProgress(stage, `${message}，剩余约 ${formatDuration(remaining)}`);
+    const currentStep = Math.min(stepMs, remaining);
+    await waitTarget.waitForTimeout(currentStep);
+    remaining -= currentStep;
+  }
+  finishTerminalProgress();
+}
+
 function hash33(value) {
   let result = 5381;
   for (const char of value) {
@@ -218,6 +268,36 @@ function normalizeImageUrl(url) {
     return value.replace(/^http:\/\//i, 'https://');
   }
   return value;
+}
+
+function formatChineseDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}年${month}月${day}日`;
+}
+
+function normalizeRelativeDateText(value, referenceDate = new Date()) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+  const match = text.match(/^(今天|昨天|前天)(\d{1,2}:\d{2})?/);
+  if (!match) {
+    return text;
+  }
+
+  const [, relativeLabel, timePart = ''] = match;
+  const date = new Date(referenceDate);
+  date.setHours(0, 0, 0, 0);
+  if (relativeLabel === '昨天') {
+    date.setDate(date.getDate() - 1);
+  } else if (relativeLabel === '前天') {
+    date.setDate(date.getDate() - 2);
+  }
+
+  const absolutePrefix = `${formatChineseDate(date)}${timePart ? ` ${timePart}` : ''}`;
+  return `${absolutePrefix}${text.slice(match[0].length)}`.trim();
 }
 
 function collectPostImageUrls(post) {
@@ -391,7 +471,7 @@ function normalizeDesktopPost(post, targetQq) {
   const tid = String(post?.tid || '');
   const imageUrls = Array.isArray(post?.images) ? post.images.filter(Boolean) : [];
   return {
-    created_time: String(post?.created_time || ''),
+    created_time: normalizeRelativeDateText(post?.created_time || ''),
     tid,
     content: normalizeText(post?.content || ''),
     raw_content: normalizeText(post?.content || ''),
@@ -441,20 +521,29 @@ async function openDesktopMoodFrame(page, targetQq) {
 }
 
 async function expandDesktopPosts(frame) {
-  const selectors = ['.f_toggle', '.rt_has_more_con', '.md_unfold'];
-  for (const selector of selectors) {
-    const locator = frame.locator(selector);
-    const count = await locator.count();
-    for (let index = 0; index < count; index += 1) {
-      const item = locator.nth(index);
-      try {
-        if (await item.isVisible({ timeout: 500 })) {
-          await item.click({ timeout: 1000 });
-          await frame.waitForTimeout(150);
+  const selectors = ['.f_toggle', '.rt_has_more_con', '.md_unfold', 'a', 'span', 'button'];
+  for (let round = 0; round < 3; round += 1) {
+    let clicked = 0;
+    for (const selector of selectors) {
+      const locator = ['a', 'span', 'button'].includes(selector)
+        ? frame.locator(selector).filter({ hasText: /全文|展开|更多/ })
+        : frame.locator(selector);
+      const count = await locator.count();
+      for (let index = 0; index < count; index += 1) {
+        const item = locator.nth(index);
+        try {
+          if (await item.isVisible({ timeout: 500 })) {
+            await item.click({ timeout: 1000 });
+            clicked += 1;
+            await frame.waitForTimeout(180);
+          }
+        } catch (error) {
+          continue;
         }
-      } catch (error) {
-        continue;
       }
+    }
+    if (!clicked) {
+      break;
     }
   }
 }
@@ -463,7 +552,7 @@ async function prepareDesktopPageForExtraction(frame, pageWaitMs) {
   const settleMs = Math.max(3000, Math.min(pageWaitMs, 8000));
   const stepPauseMs = Math.max(800, Math.min(Math.floor(pageWaitMs / 8), 2500));
 
-  await frame.waitForTimeout(settleMs);
+  await waitWithProgress(frame, settleMs, '抓取', '等待页面基础内容稳定');
   await frame.evaluate(async (pauseMs) => {
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const root = document.scrollingElement || document.documentElement || document.body;
@@ -482,7 +571,12 @@ async function prepareDesktopPageForExtraction(frame, pageWaitMs) {
   }, stepPauseMs);
 
   await expandDesktopPosts(frame);
-  await frame.waitForTimeout(Math.max(1500, Math.min(Math.floor(pageWaitMs / 3), 6000)));
+  await waitWithProgress(
+    frame,
+    Math.max(1500, Math.min(Math.floor(pageWaitMs / 3), 6000)),
+    '抓取',
+    '等待展开后的内容加载完成'
+  );
 }
 
 async function extractDesktopPostsFromFrame(frame, targetQq) {
@@ -556,19 +650,24 @@ async function extractDesktopPostsFromFrame(frame, targetQq) {
       }
       const imageNodes = imageElements
         .map((img) => {
-          const url =
-            img.getAttribute('data-src') ||
-            img.getAttribute('orgsrc') ||
-            img.getAttribute('src') ||
-            '';
+          const url = img.getAttribute('src') || '';
           return shouldKeepImage(img, url) ? url : '';
         })
         .filter(Boolean);
 
       const footerText = text(sourceNode ? sourceNode.innerText : '');
-      const commentMatch = footerText.match(/评论\((\d+)\)/) || footerText.match(/评论(\d+)/);
-      const likeMatch = footerText.match(/赞\((\d+)\)/) || footerText.match(/赞(\d+)/);
+      const extractCount = (pattern) => {
+        const match = footerText.match(pattern);
+        return Number((match && (match[1] || match[2])) || 0);
+      };
+      const commentCount = extractCount(/评论(?:\((\d+)\)|\s*(\d+))?/);
+      const likeCount =
+        extractCount(/(?:点赞|赞)(?:\((\d+)\)|\s*(\d+))?/) ||
+        extractCount(/转发(?:\((\d+)\)|\s*(\d+))?/);
       const content = text(contentNode ? contentNode.innerText : box.innerText);
+      const hasExpand =
+        Boolean(box.querySelector('.f_toggle, .rt_has_more_con, .md_unfold')) ||
+        /全文|展开|更多/.test(text(box.innerText));
 
       return {
         tid,
@@ -577,9 +676,10 @@ async function extractDesktopPostsFromFrame(frame, targetQq) {
         source_name: text(userNode ? userNode.innerText : ''),
         app_name: '',
         location: text(locationNode ? locationNode.innerText : ''),
-        comment_count: commentMatch ? Number(commentMatch[1]) : 0,
-        like_count: likeMatch ? Number(likeMatch[1]) : 0,
+        comment_count: commentCount,
+        like_count: likeCount,
         images: imageNodes.filter(Boolean),
+        has_expand: hasExpand,
         extra_comments: text(commentsNode ? commentsNode.innerText : ''),
       };
     });
@@ -591,7 +691,13 @@ async function extractDesktopPostsFromFrame(frame, targetQq) {
 }
 
 async function goToNextDesktopPage(frame) {
-  const pager = frame.locator('a, span').filter({ hasText: '下一页' }).last();
+  const nextByText = frame.locator('a, span, button').filter({ hasText: /下一页/ });
+  const pager =
+    (await nextByText.count()) > 0
+      ? nextByText.last()
+      : frame
+          .locator('#pager_next_0, .mod_pagenav_main .bt_next, .mod_pagenav .bt_next, .mod_pagenav_main a.next, .mod_pagenav a.next')
+          .first();
   if ((await pager.count()) === 0) {
     return false;
   }
@@ -698,7 +804,7 @@ async function fetchPostsViaDesktopDom(page, targetQq, options) {
         console.log(
           `Segment completed at page ${pageIndex}. Pausing ${segmentPauseMs} ms before continuing.`
         );
-        await frame.waitForTimeout(segmentPauseMs);
+        await waitWithProgress(frame, segmentPauseMs, '暂停', `当前已抓到第 ${pageIndex} 页，分段暂停中`);
       }
     }
 
@@ -767,8 +873,7 @@ async function waitForMobileLogin(context, page, timeoutSeconds) {
       skeyCookie &&
       !url.includes('ptlogin2.qq.com') &&
       !url.includes('/cgi-bin/login') &&
-      !bodyText.includes('请先登录') &&
-      !bodyText.includes('微博腾讯网登录');
+      !bodyText.includes('请先登录');
     if (loggedIn) {
       const qq = String(uinCookie.value || '').replace(/^o/, '');
       if (qq) {
@@ -792,7 +897,7 @@ async function ensureMobileAuthenticated(page, targetQq, timeoutSeconds) {
       timeout: 60000,
     });
     const bodyText = await page.locator('body').innerText().catch(() => '');
-    if (!bodyText.includes('请先登录') && !bodyText.includes('微博腾讯网登录')) {
+    if (!bodyText.includes('请先登录')) {
       return;
     }
     console.log('Mobile Qzone still needs manual login. Complete the login in the opened browser, then wait...');
@@ -1374,7 +1479,7 @@ async function fetchPostsInBrowser(apiContext, targetQq, pageSize, maxPages, gTk
         break;
       }
 
-      if (String(payload.message).includes('使用人数过多') && retryCount < 5) {
+      if (String(payload.message).includes('浣跨敤浜烘暟杩囧') && retryCount < 5) {
         retryCount += 1;
         await new Promise((resolve) => setTimeout(resolve, retryCount * 4000));
         continue;
@@ -1458,6 +1563,13 @@ function loadCheckpoint(checkpointPath) {
   };
 }
 
+function isBrowserClosedError(error) {
+  const message = String(error && (error.stack || error.message || error) || '');
+  return /Target page, context or browser has been closed|Browser has been closed|Execution context was destroyed/i.test(
+    message
+  );
+}
+
 async function downloadImageViaBrowserPage(page, imageUrl) {
   if (!page) {
     return null;
@@ -1494,6 +1606,23 @@ async function downloadImageViaBrowserPage(page, imageUrl) {
   return {
     contentType: payload.contentType || '',
     buffer: Buffer.from(base64, 'base64'),
+  };
+}
+
+async function downloadImageViaBrowserNavigation(page, imageUrl) {
+  if (!page) {
+    return null;
+  }
+  const response = await page.goto(imageUrl, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000,
+  });
+  if (!response || !response.ok()) {
+    throw new Error(`browser navigation failed with status ${response ? response.status() : 'unknown'}`);
+  }
+  return {
+    contentType: response.headers()['content-type'] || '',
+    buffer: await response.body(),
   };
 }
 
@@ -1550,6 +1679,9 @@ async function downloadImagesForPosts(posts, resultDir, baseName, context, page)
   const apiContext = await createDownloadContext(context);
   const cache = new Map();
   let totalDownloaded = 0;
+  let processedImages = 0;
+  const totalImages = posts.reduce((sum, post) => sum + collectPostImageUrls(post).length, 0);
+  const navigationPage = context ? await context.newPage() : null;
 
   try {
     for (let postIndex = 0; postIndex < posts.length; postIndex += 1) {
@@ -1562,6 +1694,12 @@ async function downloadImagesForPosts(posts, resultDir, baseName, context, page)
         console.log(
           `Downloading images for post ${postIndex + 1}/${posts.length}, url count: ${urls.length}`
         );
+        if (process.stdout.isTTY) {
+          updateTerminalProgress(
+            '图片',
+            `正在处理第 ${postIndex + 1}/${posts.length} 条说说，已下载 ${totalDownloaded} 张，待处理总图数 ${processedImages}/${totalImages}`
+          );
+        }
       }
 
       for (let imageIndex = 0; imageIndex < urls.length; imageIndex += 1) {
@@ -1570,6 +1708,13 @@ async function downloadImagesForPosts(posts, resultDir, baseName, context, page)
           const cachedPath = cache.get(originalUrl);
           if (cachedPath) {
             localPaths.push(cachedPath);
+          }
+          processedImages += 1;
+          if (process.stdout.isTTY) {
+            updateTerminalProgress(
+              '图片',
+              `说说 ${postIndex + 1}/${posts.length}，图片 ${processedImages}/${totalImages}，已下载 ${totalDownloaded} 张`
+            );
           }
           continue;
         }
@@ -1619,11 +1764,38 @@ async function downloadImagesForPosts(posts, resultDir, baseName, context, page)
             localPaths.push(relativePath);
             totalDownloaded += 1;
           } catch (browserError) {
-            cache.set(originalUrl, '');
-            downloadErrors.push(
-              `${originalUrl} :: request=${String(requestError)} :: browser=${String(browserError)}`
-            );
+            try {
+              const navigationResult = await downloadImageViaBrowserNavigation(navigationPage, originalUrl);
+              if (!navigationResult || !navigationResult.buffer) {
+                throw new Error('browser navigation fallback returned no data');
+              }
+              const extension = inferImageExtension(originalUrl, navigationResult.contentType);
+              const postKey = sanitizeFileName(
+                post.tid || post.created_time || `post_${String(postIndex + 1).padStart(4, '0')}`
+              );
+              const fileName = `${String(postIndex + 1).padStart(5, '0')}_${postKey}_${String(
+                imageIndex + 1
+              ).padStart(2, '0')}${extension}`;
+              const filePath = path.join(imageDir, fileName);
+              fs.writeFileSync(filePath, navigationResult.buffer);
+              relativePath = path.join(imageDirName, 'images', fileName).replace(/\\/g, '/');
+              cache.set(originalUrl, relativePath);
+              localPaths.push(relativePath);
+              totalDownloaded += 1;
+            } catch (navigationError) {
+              cache.set(originalUrl, '');
+              downloadErrors.push(
+                `${originalUrl} :: request=${String(requestError)} :: browser=${String(browserError)} :: navigation=${String(navigationError)}`
+              );
+            }
           }
+        }
+        processedImages += 1;
+        if (process.stdout.isTTY) {
+          updateTerminalProgress(
+            '图片',
+            `说说 ${postIndex + 1}/${posts.length}，图片 ${processedImages}/${totalImages}，已下载 ${totalDownloaded} 张`
+          );
         }
       }
 
@@ -1633,6 +1805,10 @@ async function downloadImagesForPosts(posts, resultDir, baseName, context, page)
       post.download_errors = downloadErrors.join('\n');
     }
   } finally {
+    finishTerminalProgress();
+    if (navigationPage) {
+      await navigationPage.close().catch(() => {});
+    }
     await apiContext.dispose();
   }
 
@@ -2103,6 +2279,19 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error.stack || String(error));
+  if (isBrowserClosedError(error)) {
+    const cliArgs = parseArgs(process.argv.slice(2));
+    const config = resolveConfig(cliArgs);
+    const resumeCheckpoint = config.resumeCheckpoint || config.checkpoint || '';
+    console.error('浏览器或页面已被关闭，当前任务已中断。');
+    if (resumeCheckpoint) {
+      console.error(`请使用这个 checkpoint 继续：${resumeCheckpoint}`);
+      console.error(`续跑命令：node get_qzone_history_browser.js --resume-checkpoint "${resumeCheckpoint}"`);
+    } else {
+      console.error(`请到 ${config.resultDir} 中找到最新的 .checkpoint.json 文件，再用 --resume-checkpoint 继续。`);
+    }
+  } else {
+    console.error(error.stack || String(error));
+  }
   process.exitCode = 1;
 });

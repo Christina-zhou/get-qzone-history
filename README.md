@@ -1,187 +1,179 @@
 # GetQzoneHistory
 
-一个用于导出 QQ 空间历史说说的小工具。它会通过真实浏览器登录 QQ 空间，抓取可访问的历史说说，并生成适合长期保存和本地浏览的 HTML、JSON、Excel 文件。
+![GetQzoneHistory Banner](assets/get-qzone-history-banner.svg)
+
+一个用于导出 QQ 空间历史说说的小工具。它通过真实浏览器登录 QQ 空间，抓取可访问的历史说说，并生成适合长期保存和本地浏览的 `HTML`、`JSON`、`Excel` 文件。
+
+演示预览：  
+https://htmlpreview.github.io/?https://raw.githubusercontent.com/Christina-zhou/get-qzone-history/main/resource/publish-demo/demo-viewer.html
+
+## 本次版本更新
+
+- 解决图片无法稳定下载到本地的问题，导出结果可直接关联本地图片文件
+- 解决长文说说在抓取时被截断的问题，改为在列表页展开后再提取正文
+- 新增两份说明文档：
+  - `零基础用户操作手册.md`
+  - `AI项目说明手册.md`
 
 ## 功能特点
 
-- 扫码登录：使用 Playwright 驱动真实浏览器登录 QQ 空间，无需手动抓包
-- 自动翻页：支持桌面版和移动版两种抓取路径，自动翻页直到没有新增内容
-- 图片下载：自动下载说说中的配图，便于离线备份
-- 多格式导出：同时生成 Excel、JSON、HTML 三种结果文件
-- 离线浏览：生成适合本地查看的单文件 HTML 页面，支持排序和图片浏览
-- 断点续传：支持 checkpoint 机制，长时间抓取中断后可以继续
-- 灵活配置：支持指定页码范围、分段暂停、连接已有浏览器等高级参数
+- 扫码登录：使用 Playwright 驱动真实浏览器登录 QQ 空间
+- 列表页抓取：在桌面版说说列表页展开正文后抓取内容
+- 自动翻页：通过“下一页”逐页抓取历史说说
+- 图片下载：自动下载正文图片区图片到本地目录
+- 多格式导出：同时生成 `HTML`、`JSON`、`XLSX`
+- 断点续跑：支持 `checkpoint` 续跑长任务
+- 本地浏览：生成离线 HTML 浏览页，便于按时间查看内容和图片
 
 ## 适用场景
 
-- 想把自己历年的 QQ 空间说说做一份本地备份
-- 想把零散内容导出成结构化数据，便于后续检索或分析
-- 想生成一个不依赖 QQ 空间在线服务的离线浏览页面
+- 备份自己的 QQ 空间历史说说
+- 导出结构化数据用于检索、整理或交给 AI 处理
+- 生成不依赖 QQ 空间在线服务的本地浏览结果
 
-## 快速开始
+## 环境要求
 
-### 环境要求
+- Node.js 18+
+- Google Chrome
+- Windows 优先，其他桌面系统理论可用
 
-- [Node.js](https://nodejs.org/) 18+
-- [Google Chrome](https://www.google.com/chrome/) 浏览器
-- Windows / macOS / Linux
-
-### 安装
+## 安装
 
 ```bash
-# 克隆仓库
 git clone https://github.com/Christina-zhou/get-qzone-history.git
 cd get-qzone-history
-
-# 安装依赖
 npm install
 ```
 
-> 注意：首次运行 `npm install` 时，Playwright 可能会下载浏览器运行依赖，耗时会稍长一些。如果本机已经安装 Chrome，可以用 `--browser-path` 指向现有浏览器。
-
-### 使用
-
-```bash
-# 基本用法：获取自己的说说
-node get_qzone_history_browser.js
-
-# 指定浏览器路径
-node get_qzone_history_browser.js --browser-path "C:\Program Files\Google\Chrome\Application\chrome.exe"
-
-# 抓取指定 QQ 号的说说（需要有访问权限）
-node get_qzone_history_browser.js --target-qq 123456789
-
-# 使用移动版模式（某些情况下能获取更多历史说说）
-node get_qzone_history_browser.js --mobile
-
-# 指定页码范围
-node get_qzone_history_browser.js --start-page 1 --end-page 50
-```
-
-运行流程：
-1. 浏览器会自动打开 QQ 空间登录页面
-2. 用手机 QQ 扫码登录
-3. 登录成功后自动开始抓取
-4. 抓取完成后结果保存在 `resource/result/` 目录下
-
-### Python 入口（可选）
-
-如果你更习惯 Python：
+如需使用 Python 入口：
 
 ```bash
 pip install -r requirements.txt
+```
+
+## 快速开始
+
+最常用方式：
+
+```bash
+node get_qzone_history_browser.js
+```
+
+指定目标 QQ：
+
+```bash
+node get_qzone_history_browser.js --target-qq 123456789
+```
+
+指定页码范围：
+
+```bash
+node get_qzone_history_browser.js --start-page 1 --end-page 50
+```
+
+慢速抓取，降低风控概率：
+
+```bash
+node get_qzone_history_browser.js --page-wait-ms 20000 --segment-pages 10 --segment-pause-ms 180000
+```
+
+从 checkpoint 继续：
+
+```bash
+node get_qzone_history_browser.js --resume-checkpoint "resource/result/你的checkpoint文件名.checkpoint.json"
+```
+
+Python 包装入口：
+
+```bash
 python get_qzone_history.py
 ```
 
-这个入口实际上调用的是同一个 Node.js 脚本。
+## 运行流程
 
-## 命令行参数
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--config` | 配置文件路径 | `qzone_history.ini` |
-| `--target-qq` | 目标 QQ 号 | 登录账号本人 |
-| `--browser-path` | Chrome 浏览器路径 | `C:\Program Files\Google\Chrome\Application\chrome.exe` |
-| `--headless` | 无头模式运行 | 关闭 |
-| `--mobile` | 使用移动版模式抓取 | 关闭 |
-| `--connect-cdp` | 连接已有浏览器的 CDP 地址 | - |
-| `--start-page` | 起始页码 | 1 |
-| `--end-page` | 结束页码 | 不限 |
-| `--page-wait-ms` | 每页等待时间（毫秒） | 20000 |
-| `--segment-pages` | 每多少页暂停一次 | 30 |
-| `--segment-pause-ms` | 暂停时长（毫秒） | 180000 |
-| `--checkpoint` | 从 checkpoint 文件恢复 | - |
-| `--resume-checkpoint` | 指定续传的 checkpoint | - |
-| `--stagnant-page-limit` | 连续无新内容页数阈值 | 8 |
-
-## 配置文件
-
-`qzone_history.ini` 示例：
-
-```ini
-[paths]
-temp_dir = resource/temp
-result_dir = resource/result
-
-[login]
-poll_interval_seconds = 2
-login_timeout_seconds = 180
-
-[fetch]
-page_size = 20
-max_pages = 0
-```
+1. 脚本打开 Chrome 并进入 QQ 空间
+2. 用户手动扫码登录
+3. 登录成功后开始抓取当前页
+4. 每页等待内容和图片加载完成
+5. 点击“下一页”继续抓取
+6. 最终输出到 `resource/result/`
 
 ## 输出文件
 
-抓取完成后，在 `resource/result/` 目录下生成：
+抓取完成后会生成：
 
-```
+```text
 resource/result/
-├── <QQ号>_<时间戳>.xlsx          # Excel 格式
-├── <QQ号>_<时间戳>.json          # JSON 格式
-├── <QQ号>_<时间戳>.html          # 可离线浏览的网页
-├── <QQ号>_<时间戳>.checkpoint.json  # 断点续传文件
-└── <QQ号>_<时间戳>_assets/       # 下载的图片
+├── <QQ号>_<时间戳>.json
+├── <QQ号>_<时间戳>.xlsx
+├── <QQ号>_<时间戳>.html
+├── <QQ号>_<时间戳>.checkpoint.json
+└── <QQ号>_<时间戳>_assets/
     └── images/
 ```
 
-为了方便在 GitHub 仓库中展示项目效果，仓库内额外提供一组匿名示例文件：
+说明：
 
-```
+- `html`：离线浏览页
+- `json`：结构化结果
+- `xlsx`：Excel 查看
+- `checkpoint.json`：中断续跑
+- `images/`：下载到本地的正文图片
+
+仓库内额外保留匿名演示样本：
+
+```text
 resource/publish-demo/
-├── demo-posts.json   # 匿名示例数据，对应结构化导出结果
-└── demo-viewer.html  # 匿名示例页面，对应最终离线浏览页面
+├── demo-posts.json
+└── demo-viewer.html
 ```
 
-这个目录只用于开源展示，不包含真实账号的运行结果、缓存文件或登录信息。
+真实抓取结果、缓存和日志不会提交到 GitHub。
+
+## 重要文档
+
+- `零基础用户操作手册.md`：面向 0 代码基础用户
+- `AI项目说明手册.md`：面向 AI 助手和后续维护者
 
 ## 项目结构
 
-```
+```text
 get-qzone-history/
-├── get_qzone_history_browser.js  # 核心脚本（Playwright + Node.js）
-├── get_qzone_history.py          # Python 入口（调用 Node.js 脚本）
-├── qzone_history.ini             # 配置文件
-├── requirements.txt              # Python 依赖
-├── package.json                  # Node.js 依赖
-├── resource/                     # 运行时资源目录
-│   ├── result/                   # 导出结果（git 忽略）
-│   ├── temp/                     # 临时文件（git 忽略）
-│   └── publish-demo/             # 发布展示用的匿名示例文件
-├── LICENSE
-└── README.md
+├── get_qzone_history_browser.js
+├── get_qzone_history.py
+├── repair_export_counts.js
+├── qzone_history.ini
+├── package.json
+├── requirements.txt
+├── 零基础用户操作手册.md
+├── AI项目说明手册.md
+├── assets/
+└── resource/
+    └── publish-demo/
 ```
 
 ## 常见问题
 
-**Q: 提示 Tencent WAF 拦截怎么办？**
-A: 腾讯可能对频繁访问进行风控。可以尝试：增大 `--page-wait-ms` 和 `--segment-pause-ms`；使用 `--mobile` 模式；过一段时间再试。
+**Q: 为什么要使用真实浏览器而不是纯接口抓取？**  
+A: QQ 空间存在登录态、风控和动态加载问题。真实浏览器方案更接近人工操作，稳定性更高。
 
-**Q: 如何获取更多历史说说？**
-A: QQ 空间接口本身有限制。可以先用桌面模式抓取，再用 `--mobile` 模式补充。两次结果会自动去重。
+**Q: 为什么有时会提示“使用人数过多”或被 WAF 拦截？**  
+A: 这是 QQ 空间侧的限流或风控。建议增大 `--page-wait-ms` 和 `--segment-pause-ms`，并通过 checkpoint 分段运行。
 
-**Q: 图片下载失败怎么办？**
-A: 部分历史图片可能已被 QQ 服务器清理。脚本会自动跳过下载失败的图片并记录错误。
+**Q: 浏览器被我手动关掉了怎么办？**  
+A: 使用最新的 `checkpoint.json` 配合 `--resume-checkpoint` 继续，不必从头重跑。
 
-**Q: 仓库里的示例文件为什么不是我的真实说说？**
-A: 开源仓库默认不应包含个人隐私数据，因此仓库只保留匿名示例文件来展示导出效果。你本地运行后生成的真实结果仍会保存在 `resource/result/` 中，但默认不会提交到 Git。
+**Q: 仓库里为什么没有真实导出结果？**  
+A: 开源仓库默认不应包含个人历史内容和图片，因此仓库只保留匿名演示文件。
 
 ## 致谢
 
-- 登录方法参考自 [python-QQ空间扫码登录](https://blog.csdn.net/m0_50153253/article/details/113780595)
-- 原始项目灵感来自 [LibraHp/GetQzonehistory](https://github.com/LibraHp/GetQzonehistory)
+- 原始灵感参考 [LibraHp/GetQzonehistory](https://github.com/LibraHp/GetQzonehistory)
 
 ## License
 
 [MIT](LICENSE)
 
----
-
 ## English Summary
 
-A tool for exporting QQ Zone post history into offline-viewable HTML pages, JSON files, and Excel spreadsheets.
-
-**Features**: browser-based QR login via Playwright, automatic pagination, image downloading, checkpoint resume, and clean offline export formats.
-
-**Quick start**: `git clone`, `npm install`, `node get_qzone_history_browser.js`, scan the QR code with mobile QQ, then wait for the export to finish.
+A browser-based tool for exporting QQ Zone post history into offline-viewable HTML pages, JSON files, and Excel spreadsheets. It supports QR login, desktop DOM pagination, local image download, checkpoint resume, and documentation for both end users and AI agents.

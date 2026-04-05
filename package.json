@@ -1,6 +1,6 @@
 {
   "name": "get-qzone-history",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "获取QQ空间历史说说并生成本地可浏览网页",
   "main": "get_qzone_history_browser.js",
   "scripts": {
